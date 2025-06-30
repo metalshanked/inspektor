@@ -54,7 +54,7 @@ python inspektor.py
 The application can also be run in command-line mode, which is useful for automated monitoring or running as a service:
 
 ```
-python inspektor.py --mode auto --scan_dir "C:\path\to\monitor" --hex_signatures "50 4B 03 04,50 4B 05 06" --text_signatures "encrypted,password" --match_all
+.\inspektor.exe --mode=auto --scan_dir="F:\test" --hex_signatures="504B0304,504B0506,4D5A,504" --text_signatures="instrument,apple" --match_all --file_extensions=".docx,.xlsx,.pdf" --max_load_bytes="1024" --move_files_path="F:\matches" --log_dir="F:\logs"
 ```
 
 #### CLI Arguments
@@ -106,6 +106,7 @@ You can run Inspektor as a Windows service using NSSM (Non-Sucking Service Manag
 
 ```
 nssm.exe install InspektorService
+Note for Powershell: .\nssm.exe install InspektorService 
 ```
 
 5. In the NSSM service installer dialog:
@@ -124,7 +125,7 @@ nssm.exe install InspektorService
    ```
    Path: C:\path\to\inspektor\dist\inspektor.exe
    Startup directory: C:\path\to\inspektor\dist
-   Arguments: --mode auto --scan_dir "C:\Documents\incoming" --hex_signatures "50 4B 03 04" --text_signatures "encrypted,password" --move_files_path "D:\MatchedFiles"
+   Arguments: --mode=auto --scan_dir="F:\test" --hex_signatures="504B0304,504B0506,4D5A,504" --text_signatures="instrument,apple" --match_all --file_extensions=".docx,.xlsx,.pdf" --max_load_bytes="1024" --move_files_path="F:\matches" --log_dir="F:\logs"
    ```
 
 6. Configure other service settings as needed (service name, description, startup type, etc.)

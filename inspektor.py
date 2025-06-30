@@ -510,18 +510,18 @@ def create_layout():
     # Define the sidebar
     sidebar = [
         [sg.Text("Mode", font=("Helvetica", 12))],
-        [sg.Radio("Manual", "MODE", default=True, key="-MANUAL_MODE-", enable_events=True),
-         sg.Radio("Auto", "MODE", default=False, key="-AUTO_MODE-", enable_events=True)],
+        [sg.Radio("Manual", "MODE", default=True, key="-MANUAL_MODE-", enable_events=True, tooltip="Manual mode: Select files or directories to analyze on demand"),
+         sg.Radio("Auto", "MODE", default=False, key="-AUTO_MODE-", enable_events=True, tooltip="Auto mode: Continuously monitor a directory for new files and analyze them automatically")],
         [sg.HorizontalSeparator()],
         [sg.Text("File Extensions", font=("Helvetica", 12))],
-        [sg.Multiline(default_text=".pptx, .docx, .xlsx", size=(30, 3), key="-FILE_EXTENSIONS-", tooltip="Comma-separated list of file extensions to scan (e.g., .txt,.pdf,.docx). Leave empty to scan all files.")],
+        [sg.Multiline(default_text=".pptx, .docx, .xlsx", size=(30, 3), key="-FILE_EXTENSIONS-", tooltip="Enter file extensions to scan (comma-separated or one per line, e.g., .txt,.pdf,.docx). Leave empty to scan all files.")],
         [sg.Text("Hex Signatures", font=("Helvetica", 12)), sg.Text("[info]", key="-HEX_INFO_LINK-", text_color="blue", enable_events=True, tooltip="https://en.wikipedia.org/wiki/List_of_file_signatures")],
-        [sg.Multiline(default_text="50 4B 03 04\n50 4B 05 06\n50 4B 07 08", size=(30, 3), key="-HEX_SIGNATURES-")],
+        [sg.Multiline(default_text="50 4B 03 04\n50 4B 05 06\n50 4B 07 08", size=(30, 3), key="-HEX_SIGNATURES-", tooltip="Enter hex signatures to search for (comma-separated or one per line). Example: 50 4B 03 04 for ZIP files.")],
         [sg.Text("Text Signatures", font=("Helvetica", 12))],
-        [sg.Multiline(default_text="voltage\nencrypt", size=(30, 3), key="-TEXT_SIGNATURES-")],
-        [sg.Checkbox("Match All Text Signatures", default=False, key="-MATCH_ALL-")],
+        [sg.Multiline(default_text="voltage\nencrypt", size=(30, 3), key="-TEXT_SIGNATURES-", tooltip="Enter text patterns to search for (comma-separated or one per line). Case-insensitive.")],
+        [sg.Checkbox("Match All Text Signatures", default=False, key="-MATCH_ALL-", tooltip="If checked, files must contain ALL text signatures to match. Otherwise, files matching ANY signature will be included.")],
         [sg.Text("Maximum Load Bytes", font=("Helvetica", 12))],
-        [sg.Input("1024", size=(10, 1), key="-MAX_LOAD_BYTES-"), sg.Text("bytes")]
+        [sg.Input("1024", size=(10, 1), key="-MAX_LOAD_BYTES-", tooltip="Maximum number of bytes to read from each file. Larger values are more thorough but slower."), sg.Text("bytes")]
     ]
 
     # Define the main content area
@@ -532,7 +532,7 @@ def create_layout():
                             tooltip="Select one or more files to analyze"),
              sg.InputText(key="-DIR_PATH-", visible=False, enable_events=True),
              sg.FolderBrowse("Select Directory", tooltip="Select a directory to scan for files"),
-             sg.Checkbox("Include Subdirectories", default=False, key="-RECURSIVE-"),
+             sg.Checkbox("Include Subdirectories", default=False, key="-RECURSIVE-", tooltip="If checked, all subdirectories will also be scanned for matching files"),
              sg.Button("Reset", key="-RESET-", tooltip="Clear all signatures and reset to defaults",
                        disabled_button_color=("gray", "lightgray")),
              sg.InputText(key="-LOG_DIR-", visible=False, enable_events=True),
@@ -746,6 +746,22 @@ def scan_directory_and_process(directory_path: str, hex_signatures: List[str],
     logging.info(f"Initial scan complete. Processed {processed_count} files.")
     return processed_count
 
+def parse_signatures(signatures_text: str) -> List[str]:
+    """
+    Parse signatures text that can be either comma-separated or newline-separated.
+
+    Args:
+        signatures_text: Text containing signatures, either comma-separated or newline-separated
+
+    Returns:
+        List of parsed signatures
+    """
+    # Replace newlines with commas
+    normalized_text = signatures_text.replace("\n", ",")
+
+    # Split by comma and filter out empty entries
+    return [sig.strip() for sig in normalized_text.split(",") if sig.strip()]
+
 def parse_cli_args() -> argparse.Namespace:
     """
     Parse command line arguments for CLI mode.
@@ -757,10 +773,10 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--mode', choices=['auto'], default='auto', help='Operation mode (currently only auto is supported)')
     parser.add_argument('--scan_dir', required=True, help='Directory to scan and monitor')
     parser.add_argument('--file_extensions', default='',
-                        help='Comma-separated list of file extensions to scan (e.g., .txt,.pdf,.docx). Leave empty, use "*.*", or ".*" to scan all files')
-    parser.add_argument('--hex_signatures', default='', help='Comma-separated list of hex signatures')
-    parser.add_argument('--text_signatures', default='', help='Comma-separated list of text signatures')
-    parser.add_argument('--match_all', action='store_true', help='Whether all text signatures must match')
+                        help='Comma-separated or newline-separated list of file extensions to scan (e.g., .txt,.pdf,.docx). Leave empty, use "*.*", or ".*" to scan all files')
+    parser.add_argument('--hex_signatures', default='', help='Comma-separated or newline-separated list of hex signatures')
+    parser.add_argument('--text_signatures', default='', help='Comma-separated or newline-separated list of text signatures')
+    parser.add_argument('--match_all',action='store_true', help='Whether all text signatures must match')
     parser.add_argument('--max_load_bytes', type=int, default=1024, help='Maximum number of bytes to load from each file')
     parser.add_argument('--move_files_path', help='Custom directory path where matched files will be moved (default: "matches" subfolder in scan directory)')
     parser.add_argument('--log_dir', help='Directory to store log files (default: application directory)')
@@ -824,10 +840,10 @@ def run_cli_mode() -> None:
         return 1
 
     # Parse hex signatures
-    hex_signatures = [sig.strip() for sig in args.hex_signatures.split(',') if sig.strip()]
+    hex_signatures = parse_signatures(args.hex_signatures)
 
     # Parse text signatures
-    text_signatures = [sig.strip() for sig in args.text_signatures.split(',') if sig.strip()]
+    text_signatures = parse_signatures(args.text_signatures)
 
     # Check if we have signatures
     if not (hex_signatures or text_signatures):
@@ -1062,10 +1078,10 @@ def main() -> int:
                 text_signatures_text = values["-TEXT_SIGNATURES-"].strip()
 
                 # Parse hex signatures
-                hex_signatures = [line.strip() for line in hex_signatures_text.split("\n") if line.strip()]
+                hex_signatures = parse_signatures(hex_signatures_text)
 
                 # Parse text signatures
-                text_signatures = [line.strip() for line in text_signatures_text.split("\n") if line.strip()]
+                text_signatures = parse_signatures(text_signatures_text)
 
                 # Get match all setting
                 match_all = values["-MATCH_ALL-"]
@@ -1181,10 +1197,10 @@ def main() -> int:
             text_signatures_text = values["-TEXT_SIGNATURES-"].strip()
 
             # Parse hex signatures
-            hex_signatures = [line.strip() for line in hex_signatures_text.split("\n") if line.strip()]
+            hex_signatures = parse_signatures(hex_signatures_text)
 
             # Parse text signatures
-            text_signatures = [line.strip() for line in text_signatures_text.split("\n") if line.strip()]
+            text_signatures = parse_signatures(text_signatures_text)
 
             # Get match all setting
             match_all = values["-MATCH_ALL-"]
@@ -1276,10 +1292,10 @@ def main() -> int:
             text_signatures_text = values["-TEXT_SIGNATURES-"].strip()
 
             # Parse hex signatures
-            hex_signatures = [line.strip() for line in hex_signatures_text.split("\n") if line.strip()]
+            hex_signatures = parse_signatures(hex_signatures_text)
 
             # Parse text signatures
-            text_signatures = [line.strip() for line in text_signatures_text.split("\n") if line.strip()]
+            text_signatures = parse_signatures(text_signatures_text)
 
             # Get match all setting
             match_all = values["-MATCH_ALL-"]
@@ -1325,6 +1341,7 @@ def main() -> int:
             # Clear all signatures and reset to defaults
             window["-HEX_SIGNATURES-"].update("50 4B 03 04\n50 4B 05 06\n50 4B 07 08")  # Default hex signatures
             window["-TEXT_SIGNATURES-"].update("voltage\nencrypt")  # Reset to default text signatures
+            window["-FILE_EXTENSIONS-"].update(".pptx, .docx, .xlsx")  # Reset to default file extensions
             window["-MATCH_ALL-"].update(False)  # Reset match all checkbox
             window["-MAX_LOAD_BYTES-"].update("1024")  # Reset max load bytes
             window["-RECURSIVE-"].update(False)  # Reset recursive checkbox
@@ -1385,10 +1402,10 @@ def main() -> int:
             save_state(values, selected_files, selected_directory)
 
             # Parse hex signatures
-            hex_signatures = [line.strip() for line in hex_signatures_text.split("\n") if line.strip()]
+            hex_signatures = parse_signatures(hex_signatures_text)
 
             # Parse text signatures
-            text_signatures = [line.strip() for line in text_signatures_text.split("\n") if line.strip()]
+            text_signatures = parse_signatures(text_signatures_text)
 
             # Get match all setting
             match_all = values["-MATCH_ALL-"]
