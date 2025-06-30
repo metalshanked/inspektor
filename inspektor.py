@@ -12,10 +12,14 @@ import json
 import logging
 import argparse
 import webbrowser
+import operator
 from logging.handlers import RotatingFileHandler
 from typing import List, Dict, Tuple, Set, Optional, Union
 from automonitor import AutoMonitor
 import psgtray
+
+# Constants
+RESULT_TABLE_HEADERS = ["Filename", "Has Hex Signature", "Text Match", "Hex Matches", "Text Matches"]
 
 # For console handling in CLI mode when built with --windowed
 if sys.platform == 'win32':
@@ -536,13 +540,15 @@ def create_layout():
         [sg.Text("", key="-STATUS-")],
         [sg.Table(
             values=[],
-            headings=["Filename", "Has Hex Signature", "Text Match", "Hex Matches", "Text Matches"],
+            headings=RESULT_TABLE_HEADERS,
             auto_size_columns=False,
             col_widths=[30, 15, 15, 30, 30],
             justification="left",
             num_rows=10,
             key="-RESULTS_TABLE-",
-            tooltip="Analysis Results"
+            tooltip="Analysis Results",
+            enable_click_events=True,
+            vertical_scroll_only=False
         )],
         []
     ]
@@ -756,6 +762,25 @@ def parse_cli_args() -> argparse.Namespace:
     parser.add_argument('--log_dir', help='Directory to store log files (default: application directory)')
 
     return parser.parse_args()
+
+def sort_table(table, cols):
+    """
+    Sort a table by multiple columns.
+
+    Args:
+        table: A list of lists (or tuple of tuples) where each inner list represents a row
+        cols: A list (or tuple) specifying the column numbers to sort by
+              e.g. (1,0) would sort by column 1, then by column 0
+
+    Returns:
+        The sorted table
+    """
+    for col in reversed(cols):
+        try:
+            table = sorted(table, key=operator.itemgetter(col))
+        except Exception as e:
+            logging.error(f"Error in sort_table: {e}")
+    return table
 
 def run_cli_mode() -> None:
     """
@@ -976,10 +1001,10 @@ def main() -> int:
         event, values = window.read()
 
         # IMPORTANT: Handle system tray events
-        if event == tray.key:
+        if isinstance(event, (str, int)) and event == tray.key:
             event = values[event]  # Use the system tray's event as if it was from the window
 
-        if event in (sg.WINDOW_CLOSED, 'Exit', sg.WIN_CLOSE_ATTEMPTED_EVENT):
+        if isinstance(event, (str, int)) and event in (sg.WINDOW_CLOSED, 'Exit', sg.WIN_CLOSE_ATTEMPTED_EVENT):
             # Stop auto monitoring if active
             if is_auto_mode:
                 auto_monitor.stop_monitoring()
@@ -991,25 +1016,25 @@ def main() -> int:
             tray.close()
             break
 
-        if event in ('Show Window', sg.EVENT_SYSTEM_TRAY_ICON_DOUBLE_CLICKED):
+        if isinstance(event, (str, int)) and event in ('Show Window', sg.EVENT_SYSTEM_TRAY_ICON_DOUBLE_CLICKED):
             window.un_hide()
             window.bring_to_front()
-        elif event in ('Hide Window'):
+        elif isinstance(event, str) and event in ('Hide Window'):
             window.hide()
             tray.show_icon()  # Make sure the icon is visible
 
-        if event == "-MINIMIZE_TO_TRAY-":
+        if isinstance(event, str) and event == "-MINIMIZE_TO_TRAY-":
             # Hide the window and ensure tray icon is visible
             window.hide()
             tray.show_icon()
             window["-STATUS-"].update("Application minimized to system tray")
 
-        if event == "-HEX_INFO_LINK-":
+        if isinstance(event, str) and event == "-HEX_INFO_LINK-":
             # Open the Wikipedia page for file signatures
             webbrowser.open("https://en.wikipedia.org/wiki/List_of_file_signatures")
             window["-STATUS-"].update("Opened Wikipedia page for file signatures")
 
-        if event == "-LOG_DIR-":
+        if isinstance(event, str) and event == "-LOG_DIR-":
             # User selected a new log directory
             if values["-LOG_DIR-"]:
                 log_dir = setup_logging(values["-LOG_DIR-"])
@@ -1017,7 +1042,7 @@ def main() -> int:
                 logging.info(f"Log directory changed to: {log_dir}")
 
         # Handle mode toggle
-        if event == "-MANUAL_MODE-" or event == "-AUTO_MODE-":
+        if isinstance(event, str) and (event == "-MANUAL_MODE-" or event == "-AUTO_MODE-"):
             is_auto_mode = values["-AUTO_MODE-"]
 
             # Stop auto monitoring if switching to manual mode
@@ -1125,7 +1150,7 @@ def main() -> int:
             )
             update_info_banner(window, selected_files, selected_directory, has_signatures, has_files, is_auto_mode)
 
-        if event == "-FILE_PATH-":
+        if isinstance(event, str) and event == "-FILE_PATH-":
             selected_files = values["-FILE_PATH-"].split(";") if values["-FILE_PATH-"] else []
             selected_directory = None  # Clear directory selection when files are selected
             logging.info(f"Selected {len(selected_files)} files")
@@ -1141,7 +1166,7 @@ def main() -> int:
             )
             update_info_banner(window, selected_files, selected_directory, has_signatures, has_files, is_auto_mode)
 
-        if event == "-DIR_PATH-":
+        if isinstance(event, str) and event == "-DIR_PATH-":
             selected_directory = values["-DIR_PATH-"]
             selected_files = []  # Clear file selection when directory is selected
             logging.info(f"Selected directory: {selected_directory}")
@@ -1240,7 +1265,7 @@ def main() -> int:
             update_info_banner(window, selected_files, selected_directory, has_signatures, has_files, is_auto_mode)
 
         # Handle signature input changes
-        if event in ["-HEX_SIGNATURES-", "-TEXT_SIGNATURES-", "-MATCH_ALL-", "-MAX_LOAD_BYTES-"]:
+        if isinstance(event, str) and event in ["-HEX_SIGNATURES-", "-TEXT_SIGNATURES-", "-MATCH_ALL-", "-MAX_LOAD_BYTES-"]:
             # Get hex and text signatures
             hex_signatures_text = values["-HEX_SIGNATURES-"].strip()
             text_signatures_text = values["-TEXT_SIGNATURES-"].strip()
@@ -1282,7 +1307,7 @@ def main() -> int:
             )
             update_info_banner(window, selected_files, selected_directory, has_signatures, has_files, is_auto_mode)
 
-        if event == "-RESET-":
+        if isinstance(event, str) and event == "-RESET-":
             # Stop auto monitoring if active
             if is_auto_mode and auto_monitor.is_monitoring:
                 auto_monitor.stop_monitoring()
@@ -1334,7 +1359,7 @@ def main() -> int:
             )
             update_info_banner(window, selected_files, selected_directory, has_signatures, has_files, is_auto_mode)
 
-        if event == "-ANALYZE-":
+        if isinstance(event, str) and event == "-ANALYZE-":
             # Initialize variables that might be referenced later
             table_data = []
 
@@ -1462,7 +1487,7 @@ def main() -> int:
                 window["-EXPORT_CSV-"].update(disabled=True)
                 window["-ORGANIZE_FILES-"].update(disabled=True)
 
-        if event == "-EXPORT_CSV-":
+        if isinstance(event, str) and event == "-EXPORT_CSV-":
             # Get a file path to save the CSV
             save_path = sg.popup_get_file(
                 "Save CSV File",
@@ -1476,7 +1501,7 @@ def main() -> int:
                 try:
                     # Use the existing table_data variable instead of trying to get it from the table
                     # This ensures we're using the same data that was displayed in the table
-                    headers = ["Filename", "Has Hex Signature", "Text Match", "Hex Matches", "Text Matches"]
+                    headers = RESULT_TABLE_HEADERS
 
                     # Write to CSV
                     with open(save_path, 'w', newline='') as csvfile:
@@ -1493,7 +1518,7 @@ def main() -> int:
                 except Exception as e:
                     sg.popup_error(f"Error exporting to CSV: {e}")
 
-        if event == "-ORGANIZE_FILES-":
+        if isinstance(event, str) and event == "-ORGANIZE_FILES-":
             # Initialize variables that might be referenced later
             moved_files = 0
             errors = []
@@ -1576,6 +1601,27 @@ def main() -> int:
 
                 # Clear the results table
                 window["-RESULTS_TABLE-"].update([["Files have been moved", "", "", "", ""]])
+
+        # Handle table header clicks for sorting
+        if isinstance(event, tuple):
+            # TABLE CLICKED Event has value in format ('-TABLE-', '+CLICKED+', (row,col))
+            if event[0] == "-RESULTS_TABLE-":
+                if event[2][0] == -1 and event[2][1] != -1:  # Header was clicked and wasn't the "row" column
+                    col_num_clicked = event[2][1]
+                    try:
+                        # Sort the table data by the clicked column
+                        if 'table_data' in locals() and table_data:
+                            new_table = sort_table(table_data, (col_num_clicked, 0))
+                            window["-RESULTS_TABLE-"].update(new_table)
+                            table_data = new_table
+                            # Get the column name from the global headers
+                            headers = RESULT_TABLE_HEADERS
+                            # Get the column name from the headers
+                            column_name = headers[col_num_clicked]
+                            window["-STATUS-"].update(f"Sorted table by column: {column_name}")
+                    except Exception as e:
+                        logging.error(f"Error sorting table: {e}")
+                        window["-STATUS-"].update(f"Error sorting table: {e}")
 
     window.close()
 
