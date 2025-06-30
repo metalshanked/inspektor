@@ -21,6 +21,10 @@ import psgtray
 # Constants
 RESULT_TABLE_HEADERS = ["Filename", "Has Hex Signature", "Text Match", "Hex Matches", "Text Matches"]
 
+# Global variables for table sorting
+LAST_SORTED_COLUMN = None
+SORT_REVERSE = False
+
 # For console handling in CLI mode when built with --windowed
 if sys.platform == 'win32':
     try:
@@ -763,7 +767,7 @@ def parse_cli_args() -> argparse.Namespace:
 
     return parser.parse_args()
 
-def sort_table(table, cols):
+def sort_table(table, cols, reverse=False):
     """
     Sort a table by multiple columns.
 
@@ -771,13 +775,14 @@ def sort_table(table, cols):
         table: A list of lists (or tuple of tuples) where each inner list represents a row
         cols: A list (or tuple) specifying the column numbers to sort by
               e.g. (1,0) would sort by column 1, then by column 0
+        reverse: If True, sort in descending order, otherwise ascending
 
     Returns:
         The sorted table
     """
     for col in reversed(cols):
         try:
-            table = sorted(table, key=operator.itemgetter(col))
+            table = sorted(table, key=operator.itemgetter(col), reverse=reverse)
         except Exception as e:
             logging.error(f"Error in sort_table: {e}")
     return table
@@ -1611,14 +1616,29 @@ def main() -> int:
                     try:
                         # Sort the table data by the clicked column
                         if 'table_data' in locals() and table_data:
-                            new_table = sort_table(table_data, (col_num_clicked, 0))
+                            global LAST_SORTED_COLUMN, SORT_REVERSE
+
+                            # Toggle sort direction if clicking the same column again
+                            if LAST_SORTED_COLUMN == col_num_clicked:
+                                SORT_REVERSE = not SORT_REVERSE
+                            else:
+                                # New column, start with ascending sort
+                                SORT_REVERSE = False
+
+                            # Update the last sorted column
+                            LAST_SORTED_COLUMN = col_num_clicked
+
+                            # Sort the table with the appropriate direction
+                            new_table = sort_table(table_data, (col_num_clicked, 0), SORT_REVERSE)
                             window["-RESULTS_TABLE-"].update(new_table)
                             table_data = new_table
+
                             # Get the column name from the global headers
                             headers = RESULT_TABLE_HEADERS
                             # Get the column name from the headers
                             column_name = headers[col_num_clicked]
-                            window["-STATUS-"].update(f"Sorted table by column: {column_name}")
+                            sort_direction = "descending" if SORT_REVERSE else "ascending"
+                            window["-STATUS-"].update(f"Sorted table by column: {column_name} ({sort_direction})")
                     except Exception as e:
                         logging.error(f"Error sorting table: {e}")
                         window["-STATUS-"].update(f"Error sorting table: {e}")
